@@ -30,18 +30,24 @@ function createSchema(value: Record<string, unknown> | ValidationSchema): Valida
       const tmpSchema: Record<string, ValidationSchema> = {};
       const currentSchema: Record<string, ValidationSchema> = tempValue as Record<string, ValidationSchema>;
       PARAMETERS_PROPS.forEach((p) => {
-        if (currentSchema[p] && typeof currentSchema[p] === 'object') {
-          if (currentSchema[p].$$type || currentSchema[p].type) {
-            tmpSchema[p] = currentSchema[p];
+        if (currentSchema[p]) {
+          if (typeof currentSchema[p] === 'object') {
+            if (currentSchema[p].$$type || currentSchema[p].type) {
+              tmpSchema[p] = currentSchema[p];
+            } else {
+              tmpSchema[p] = {
+                type: 'object',
+                props: currentSchema[p]
+              };
+            }
           } else {
-            tmpSchema[p] = {
-              type: 'object',
-              props: currentSchema[p]
-            };
+            // only do this because schema of props could 
+            // be strings and/or other type than object
+            tmpSchema[p] = currentSchema[p];
           }
         }
       });
-      if (Object.keys(tempValue).length) {
+      if (Object.keys(tmpSchema).length) {
         tempValue = {
           $$root: true,
           type: 'object',
@@ -50,6 +56,7 @@ function createSchema(value: Record<string, unknown> | ValidationSchema): Valida
       } else {
         tempValue = tmpSchema;
       }
+    } else {
     }
 
     // if it is a ValidationSchema from the root
@@ -151,36 +158,35 @@ function validatorFV(
       const value = buildValueToValidate(schema, req);
 
       Log.info('validating %O', value);
-
-      const v = new FastestValidator(options);
-
-      const check = v.compile(schema);
+      Log.log('schema %O', schema);
 
       const erroHandler = (err: unknown) => {
         Log.error('Invalid request for %s', req.originalUrl);
-          if (typeof req.meta.parameters?.onerror === 'function') {
-            Log.error(
-              'Custom function onerror => %s',
-              req.meta.parameters.onerror.name
+        if (typeof req.meta.parameters?.onerror === 'function') {
+          Log.error(
+            'Custom function onerror => %s',
+            req.meta.parameters.onerror.name
+          );
+          return req.meta.parameters.onerror(err, req, res, next);
+        }
+        if (onerror) {
+          if (typeof onerror === 'function') {
+            Log.error('Custom function onerror => %s', onerror.name);
+            return onerror(err, req, res, next);
+          } else {
+            Log.warn(
+              'Expected arg 2 ("onerror") to be a function (ErrorRequestHandler). Instead got type "%s"',
+              typeof onerror
             );
-            return req.meta.parameters.onerror(err, req, res, next);
           }
-          if (onerror) {
-            if (typeof onerror === 'function') {
-              Log.error('Custom function onerror => %s', onerror.name);
-              return onerror(err, req, res, next);
-            } else {
-              Log.warn(
-                'Expected arg 2 ("onerror") to be a function (ErrorRequestHandler). Instead got type "%s"',
-                typeof onerror
-              );
-            }
-          }
-          return res.status(400).json(err);
+        }
+        return res.status(400).json(err);
       };
 
       // validate schema
       try {
+        const v = new FastestValidator(options);
+        const check = v.compile(schema);
         const result = await check(value, checkOptions);
         if (result === true) {
           Log.info('Valid request for %s', req.originalUrl);
@@ -189,7 +195,7 @@ function validatorFV(
         } else {
           erroHandler(result);
         }
-      } catch(err) {
+      } catch (err) {
         erroHandler(err);
       }
     }
