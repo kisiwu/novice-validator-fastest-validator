@@ -160,7 +160,7 @@ function validatorFV(
       Log.info('validating %O', value);
       Log.log('schema %O', schema);
 
-      const erroHandler = (err: unknown) => {
+      const errorHandler = (err: unknown) => {
         Log.error('Invalid request for %s', req.originalUrl);
         if (typeof req.meta.parameters?.onerror === 'function') {
           Log.error(
@@ -193,10 +193,10 @@ function validatorFV(
           Extend(req, value);
           next();
         } else {
-          erroHandler(result);
+          errorHandler(result);
         }
       } catch (err) {
-        erroHandler(err);
+        errorHandler(err);
       }
     }
   };
